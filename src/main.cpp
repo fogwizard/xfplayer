@@ -42,7 +42,7 @@ uint64_t get_time_seconds(void)
 
 int get_audio_card_status(const char *path, std::string & out_str)
 {
-    std::string str_close = "closed\n";
+    std::string str_close = "closed";
 
     std::ifstream infile;
     infile.open(path, std::ios::in);
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
                     if(0 == ret) {
                         std::string stat_str = "";
                         int stat = get_audio_card_status("/proc/asound/card0/pcm0p/sub0/status", stat_str);
-                        printf("\rwait=%lus status=%s", end - start, stat_str.c_str());
+                        printf("\rwait=%lus status=%s %d", end - start, stat_str.c_str(), stat);
                         fflush(stdout);
                         if(0 == stat) {
                             sprintf(cmd, "killall -9 vlc");
