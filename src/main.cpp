@@ -48,7 +48,7 @@ uint16_t crc16tablefast(uint8_t *ptr, uint16_t len)
     return crc;
 }
 
-int get_next_play_index(const char *dir, int *idx, int max)
+int get_current_play_index(const char *dir, int *idx, int max)
 {
     char full_path[256];
     int index = 0;
@@ -58,19 +58,12 @@ int get_next_play_index(const char *dir, int *idx, int max)
         FILE *fp = fopen(full_path, "r");
         int len = fscanf(fp, "%d",  &index);
         fclose(fp);
-
-        /* check out of range */
-        if(++index >= max) {
-            index = 0;
-        }
     } else {
+        FILE *fp = fopen(full_path, "w+");
+        fprintf(fp, "%d\n",  0);
+        fclose(fp);
         index = 0;
     }
-
-
-    FILE *fp = fopen(full_path, "w+");
-    fprintf(fp, "%d\n",  0);
-    fclose(fp);
 
     if(idx) {
         *idx = index;
@@ -79,7 +72,49 @@ int get_next_play_index(const char *dir, int *idx, int max)
     return 0;
 }
 
-int get_play_event(std::vector<std::string> &vec, std::string &s, const char *dir)
+int save_current_play_index(const char *dir, int *idx, int max)
+{
+    char full_path[256];
+    int index = 0;
+
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_idx");
+
+    FILE *fp = fopen(full_path, "w+");
+    fprintf(fp, "%d\n",  *idx);
+    fclose(fp);
+
+    return 0;
+}
+
+int set_next_play_index(const char *dir, int max)
+{
+    int idx = 0;
+    get_current_play_index(dir, &idx, max);
+
+    idx++;
+    if(idx >= max) {
+        printf("idx = %d is too big, roll back to 0\n", idx);
+        idx = 0;
+    }
+
+    save_current_play_index(dir, &idx, max);
+    return 0;
+}
+
+int set_prev_play_index(const char *dir, int max)
+{
+    int idx = 0;
+    get_current_play_index(dir, &idx, max);
+    idx--;
+    if(idx < 0) {
+        printf("idx = %d is too small , roll back to max-1\n", idx);
+        idx = max - 1;
+    }
+    save_current_play_index(dir, &idx, max);
+    return 0;
+}
+
+int switch_read(int *sw1, int *sw2, int *sw3)
 {
     char rd_buffer[512] = {0};
     uint8_t modbus_request[] = {0x01, 0x04, 0x00, 0x00,0x00, 0x04, 0xF1, 0xC9};
@@ -130,10 +165,27 @@ int get_play_event(std::vector<std::string> &vec, std::string &s, const char *di
     }
 
     /* this is the expect case */
-    int switch_play = modbus_respond[4];
-    int switch_next = modbus_respond[6];
-    int switch_prev = modbus_respond[8];
+    if(sw1) {
+        *sw1 = modbus_respond[4];
+    }
+    if(sw2) {
+        *sw1 = modbus_respond[6];
+    }
+    if(sw3) {
+        *sw1 = modbus_respond[8];
+    }
+
     //int switch_play = modbus_respond[10];
+    return 0;
+}
+
+int get_play_event(std::vector<std::string> &vec, std::string &s, const char *dir)
+{
+    int switch_play = 0;
+    int switch_next = 0;
+    int switch_prev = 0;
+
+    switch_read(&switch_play, &switch_next, &switch_prev);
 
     if(!switch_play) {
         printf("switch_play=%d is not on, wait next\n", switch_play);
@@ -143,13 +195,17 @@ int get_play_event(std::vector<std::string> &vec, std::string &s, const char *di
     int idx = 0;
     int retry = 0;
     do {
-        if(get_next_play_index(dir, &idx, vec.size())) {
+        if(get_current_play_index(dir, &idx, vec.size())) {
             printf("get_next_play_index failed\n");
             return 0;
         }
+
         if(0 == access(vec[idx].c_str(), 0)) {
             break;
         }
+
+        printf("file=%s access failed, try next\n", vec[idx].c_str());
+        set_next_play_index(dir, vec.size());
     } while(++retry < 100);
 
     s = vec[idx];
@@ -215,7 +271,6 @@ int main(int argc, char *argv[])
         }
     }
 
-
     std::string s;
     std::vector<std::string> vec;
     std::filesystem::directory_iterator list(dir);	        //文件入口容器
@@ -223,7 +278,7 @@ int main(int argc, char *argv[])
     for (auto& it:list) {
         if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
             continue;
-	}
+        }
         vec.push_back(it.path().filename());
     }
     std::sort(vec.begin(), vec.end());
@@ -268,17 +323,34 @@ int main(int argc, char *argv[])
                     }
                     ret = waitpid(id, NULL, WNOHANG);
                     if(0 == ret) {
+                        int switch_play = 0;
+                        int switch_next = 0;
+                        int switch_prev = 0;
+                        int need_kill = 0;
+
+                        switch_read(&switch_play, &switch_next, &switch_prev);
+                        if(0 == switch_play) {
+                            need_kill = 1;
+                        } else if(switch_next) {
+                            set_next_play_index(dir, vec.size());
+                            need_kill = 1;
+                        } else if(switch_prev) {
+                            set_prev_play_index(dir, vec.size());
+                            need_kill = 1;
+                        }
+
                         std::string stat_str = "";
                         int stat = get_audio_card_status("/proc/asound/card0/pcm0p/sub0/status", stat_str);
-                        printf("\rwait=%lus status=%s %d", end - start, stat_str.c_str(), stat);
-                        fflush(stdout);
-                        if(0 == stat) {
+                        printf("wait=%lus %s stat=%d\n", end - start, stat_str.c_str(), stat);
+
+                        if((need_kill) || (0 == stat)) {
                             sprintf(cmd, "killall -9 vlc");
                             system_ret = system(cmd);
                             kill(id, 1);
-                            printf("audio stop, kill pid=%d\n", id);
+                            printf("switch_play=%d audio_stat=%d kill pid=%d\n", switch_play, stat, id);
                             break;
                         }
+
                         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                     } else if(id == ret) {
                         printf("play done, delta=%lu s\n", end - start);
