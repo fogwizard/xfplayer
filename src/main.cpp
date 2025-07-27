@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
 
                         std::string stat_str = "";
                         int stat = get_audio_card_status("/proc/asound/card0/pcm0p/sub0/status", stat_str);
-                        printf("wait=%lus %s stat=%d\n", end - start, stat_str.c_str(), stat);
+                        printf("wait=%05ds %s stat=%d\n", (int)(end - start), stat_str.c_str(), stat);
 
                         if((need_kill) || (0 == stat)) {
                             sprintf(cmd, "killall -9 vlc");
