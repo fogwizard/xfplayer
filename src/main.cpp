@@ -88,29 +88,38 @@ int save_current_play_index(const char *dir, int *idx, int max)
 
 int set_next_play_index(const char *dir, int max)
 {
-    int idx = 0;
+    int idx    = 0;
+    int origin = 0;
+
     get_current_play_index(dir, &idx, max);
 
-    idx++;
+    origin = idx++;
     if(idx >= max) {
         printf("idx = %d is too big, roll back to 0\n", idx);
         idx = 0;
     }
 
     save_current_play_index(dir, &idx, max);
+
+    printf("%s: idx: %d->%d\n", __func__, origin, idx);
     return 0;
 }
 
 int set_prev_play_index(const char *dir, int max)
 {
     int idx = 0;
+    int origin = 0;
+
     get_current_play_index(dir, &idx, max);
-    idx--;
+
+    origin = idx--;
     if(idx < 0) {
         printf("idx = %d is too small , roll back to max-1\n", idx);
         idx = max - 1;
     }
     save_current_play_index(dir, &idx, max);
+
+    printf("%s: idx: %d->%d\n", __func__, origin, idx);
     return 0;
 }
 
@@ -352,6 +361,11 @@ int main(int argc, char *argv[])
                             system_ret = system(cmd);
                             kill(id, 1);
                             printf("switch_play=%d audio_stat=%d kill pid=%d\n", switch_play, stat, id);
+
+			    /* stat == 0 means play done */
+			    if(0 == stat) {
+                                set_next_play_index(dir, vec.size());
+			    }
                             break;
                         }
 
@@ -365,6 +379,6 @@ int main(int argc, char *argv[])
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     }
 
-    printf("done, system_ret=%d\n", system_ret);
+    printf("applicatino run done, system_ret=%d\n", system_ret);
 }
 
