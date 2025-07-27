@@ -12,6 +12,11 @@
 #include <fstream>
 #include <string.h>
 
+#include <stdint.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include "serial/serial.h"
+
 int get_weekday(void)
 {
     time_t rawtime;
@@ -23,11 +28,131 @@ int get_weekday(void)
     return timeinfo->tm_wday;
 }
 
-int get_play_event(std::vector<std::string> &vec, std::string &s)
+const uint16_t crctalbeabs[] = {
+    0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
+    0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400
+};
+
+uint16_t crc16tablefast(uint8_t *ptr, uint16_t len)
 {
+    uint16_t crc = 0xffff;
+    uint16_t i;
+    uint8_t ch;
+
+    for (i = 0; i < len; i++) {
+        ch = *ptr++;
+        crc = crctalbeabs[(ch ^ crc) & 15] ^ (crc >> 4);
+        crc = crctalbeabs[((ch >> 4) ^ crc) & 15] ^ (crc >> 4);
+    }
+
+    return crc;
+}
+
+int get_next_play_index(const char *dir, int *idx, int max)
+{
+    char full_path[256];
+    int index = 0;
+
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_idx");
+    if(0 == access(full_path, 0)) {
+        FILE *fp = fopen(full_path, "r");
+        fscanf(fp, "%d",  &index);
+        fclose(fp);
+
+        /* check out of range */
+        if(++index >= max) {
+            index = 0;
+        }
+    } else {
+        index = 0;
+    }
+
+
+    FILE *fp = fopen(full_path, "w+");
+    fprintf(fp, "%d\n",  0);
+    fclose(fp);
+
+    if(idx) {
+        *idx = index;
+    }
+
+    return 0;
+}
+
+int get_play_event(std::vector<std::string> &vec, std::string &s, const char *dir)
+{
+    char rd_buffer[512] = {0};
+    uint8_t modbus_request[] = {0x01, 0x04, 0x00, 0x00,0x00, 0x04, 0xF1, 0xC9};
+    uint8_t modbus_respond[] = {0x01, 0x04, 0x08, 0x00,0x01, 0x00, 0x00,0x00,0x00,0x00,0x00,0x34,0xCD};
+    int baud = 9600;
+    const char *port = "/dev/ttyUSB0";
+
     int week_day = get_weekday();
 
-    s = vec[0];
+    serial::Serial my_serial;
+
+    my_serial.setPort(port);
+    my_serial.setBaudrate(baud);
+
+    my_serial.setTimeout(serial::Timeout::max(), 1000, 0, 1000, 0);
+    my_serial.open();
+
+    if(!my_serial.isOpen()) {
+        printf("port %s is open failed, check permission\n", port);
+        return 0;
+    }
+
+    size_t bytes_wrote = my_serial.write(modbus_request, sizeof(modbus_request));
+
+    memset(modbus_respond, 0x00, sizeof(modbus_respond));
+
+    auto result = my_serial.read(modbus_respond, sizeof(modbus_respond));
+
+    my_serial.close();
+
+    char *ptr = rd_buffer;
+    int len = 0;
+    for(int i = 0; i < result; i++) {
+        len = snprintf(ptr, sizeof(rd_buffer) - (ptr - &rd_buffer[0]), "%02x ", modbus_respond[i]);
+        ptr += len;
+    }
+
+    if(result <= 2) {
+        printf("recv len=%ld is not expoect\n", result);
+        return 0;
+    }
+
+    uint16_t crc_recv = crc16tablefast(modbus_respond, result -2);
+    uint16_t crc_calc = modbus_respond[result -2] + 0x0100*modbus_respond[result -1];
+    if(crc_recv != crc_calc) {
+        printf("recv=[%s] crc_recv(0x%x) != crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
+        return 0;
+    }
+
+    /* this is the expect case */
+    int switch_play = modbus_respond[4];
+    int switch_next = modbus_respond[6];
+    int switch_prev = modbus_respond[8];
+    //int switch_play = modbus_respond[10];
+
+    if(!switch_play) {
+        printf("switch_play=%d is not on, wait next\n", switch_play);
+        return 0;
+    }
+
+    int idx = 0;
+    int retry = 0;
+    do {
+        if(get_next_play_index(dir, &idx, vec.size())) {
+            printf("get_next_play_index failed\n");
+            return 0;
+        }
+        if(0 == access(vec[idx].c_str(), 0)) {
+            break;
+        }
+    } while(++retry < 100);
+
+    s = vec[idx];
     return 1;
 }
 
@@ -42,6 +167,7 @@ uint64_t get_time_seconds(void)
 
 int get_audio_card_status(const char *path, std::string & out_str)
 {
+    static int close_count = 0;
     std::string str_close = "closed";
 
     std::ifstream infile;
@@ -61,15 +187,19 @@ int get_audio_card_status(const char *path, std::string & out_str)
     out_str = v1[0];
 
     if(v1.size() > 1) {
+        close_count  = 0;
         return 1;
     }
 
     if(v1[0] == str_close) {
-	/* no audio stream now */
-        return 0;
+        /* no audio stream now */
+        if(++close_count >5) {
+            return 0;
+        }
     }
 
     /* error in this case */
+    close_count  = 0;
     return 1;
 }
 
@@ -111,7 +241,7 @@ int main(int argc, char *argv[])
     }
 
     while(true) {
-        if(get_play_event(vec, s)) {
+        if(get_play_event(vec, s, dir)) {
             pid_t id = fork();
             start = get_time_seconds();
             printf("start=%lu.\n", start);
