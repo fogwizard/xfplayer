@@ -56,7 +56,7 @@ int get_next_play_index(const char *dir, int *idx, int max)
     snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_idx");
     if(0 == access(full_path, 0)) {
         FILE *fp = fopen(full_path, "r");
-        fscanf(fp, "%d",  &index);
+        int len = fscanf(fp, "%d",  &index);
         fclose(fp);
 
         /* check out of range */
@@ -186,19 +186,15 @@ int get_audio_card_status(const char *path, std::string & out_str)
 
     out_str = v1[0];
 
-    if(v1.size() > 1) {
-        close_count  = 0;
+    if(v1[0] == str_close) {
+        /* no audio stream now */
+        if(++close_count > 5) {
+            return 0;
+        }
         return 1;
     }
 
-    if(v1[0] == str_close) {
-        /* no audio stream now */
-        if(++close_count >5) {
-            return 0;
-        }
-    }
-
-    /* error in this case */
+    /* in playing in this case */
     close_count  = 0;
     return 1;
 }
@@ -206,6 +202,7 @@ int get_audio_card_status(const char *path, std::string & out_str)
 int main(int argc, char *argv[])
 {
     int ret = 0;
+    int system_ret = 0;
     char cmd[1024] = {0};
     const char * dir = ".";
 
@@ -226,9 +223,11 @@ int main(int argc, char *argv[])
     for (auto& it:list) {
         vec.push_back(it.path().filename());
     }
+    std::sort(vec.begin(), vec.end());
 
+    int j = 0;
     for (auto i: vec) {
-        std::cout << i << std::endl;
+        printf("[%d]%s\n", j++, i.c_str());
     }
 
     int fd[2];
@@ -248,11 +247,11 @@ int main(int argc, char *argv[])
             if(id == 0) {
                 /* exit vlc */
                 sprintf(cmd, "killall -9 vlc");
-                system(cmd);
+                system_ret = system(cmd);
                 /* run vlc */
                 sprintf(cmd, "DISPLAY=0.0 vlc \"%s/%s\"  --play-and-exit  --fullscreen",  dir, s.c_str());
                 printf("cmd=%s\n", cmd);
-                system(cmd);
+                system_ret = system(cmd);
                 break;
             } else if(id > 0) {
                 do {
@@ -260,7 +259,7 @@ int main(int argc, char *argv[])
                     if((end - start) > 3600) {
                         printf("timeout, delta=%luS\n", end - start);
                         sprintf(cmd, "killall -9 vlc");
-                        system(cmd);
+                        system_ret = system(cmd);
                         kill(id, 1);
                         break;
                     }
@@ -272,7 +271,7 @@ int main(int argc, char *argv[])
                         fflush(stdout);
                         if(0 == stat) {
                             sprintf(cmd, "killall -9 vlc");
-                            system(cmd);
+                            system_ret = system(cmd);
                             kill(id, 1);
                             printf("audio stop, kill pid=%d\n", id);
                             break;
@@ -286,5 +285,7 @@ int main(int argc, char *argv[])
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     }
+
+    printf("done, system_ret=%d\n", system_ret);
 }
 
