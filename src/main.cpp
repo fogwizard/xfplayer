@@ -42,7 +42,7 @@ uint64_t get_time_seconds(void)
 
 int get_audio_card_status(const char *path, std::string & out_str)
 {
-    std::string str_close = "close\n";
+    std::string str_close = "closed\n";
 
     std::ifstream infile;
     infile.open(path, std::ios::in);
@@ -65,9 +65,11 @@ int get_audio_card_status(const char *path, std::string & out_str)
     }
 
     if(v1[0] == str_close) {
+	/* no audio stream now */
         return 0;
     }
 
+    /* error in this case */
     return 1;
 }
 
@@ -136,7 +138,7 @@ int main(int argc, char *argv[])
                     if(0 == ret) {
                         std::string stat_str = "";
                         int stat = get_audio_card_status("/proc/asound/card0/pcm0p/sub0/status", stat_str);
-                        printf("\rwait=%luS status=%s", end - start, stat_str.c_str());
+                        printf("\rwait=%lus status=%s", end - start, stat_str.c_str());
                         fflush(stdout);
                         if(0 == stat) {
                             sprintf(cmd, "killall -9 vlc");
@@ -155,3 +157,4 @@ int main(int argc, char *argv[])
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     }
 }
+
