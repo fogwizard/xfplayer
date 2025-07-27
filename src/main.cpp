@@ -169,18 +169,20 @@ int switch_read(int *sw1, int *sw2, int *sw3)
         *sw1 = modbus_respond[4];
     }
     if(sw2) {
-        *sw1 = modbus_respond[6];
+        *sw2 = modbus_respond[6];
     }
     if(sw3) {
-        *sw1 = modbus_respond[8];
+        *sw3 = modbus_respond[8];
     }
 
     //int switch_play = modbus_respond[10];
+    //printf("recv=[%s] crc_recv(0x%x) == crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
     return 0;
 }
 
 int get_play_event(std::vector<std::string> &vec, std::string &s, const char *dir)
 {
+    char full_path[256];
     int switch_play = 0;
     int switch_next = 0;
     int switch_prev = 0;
@@ -200,13 +202,15 @@ int get_play_event(std::vector<std::string> &vec, std::string &s, const char *di
             return 0;
         }
 
-        if(0 == access(vec[idx].c_str(), 0)) {
+	snprintf(full_path, sizeof(full_path), "%s/%s", dir, vec[idx].c_str());
+        if(0 == access(full_path, 0)) {
+            printf("idx=%d file=%s\n", idx, full_path);
             break;
         }
 
-        printf("file=%s access failed, try next\n", vec[idx].c_str());
+        printf("file=%s access failed, try next\n", full_path);
         set_next_play_index(dir, vec.size());
-    } while(++retry < 100);
+    } while(++retry < 1000);
 
     s = vec[idx];
     return 1;
