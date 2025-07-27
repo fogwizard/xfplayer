@@ -60,7 +60,7 @@ int get_audio_card_status(const char *path, std::string & out_str)
 
     out_str = v1[0];
 
-    if(v1[0].size() > 1) {
+    if(v1.size() > 1) {
         return 1;
     }
 
