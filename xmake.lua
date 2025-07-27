@@ -2,7 +2,11 @@ add_rules("mode.debug", "mode.release")
 
 target("xfplayer")
     set_kind("binary")
+    add_includedirs("serial/include")
     add_files("src/*.cpp")
+    add_files("serial/src/serial.cc")
+    add_files("serial/src/impl/unix.cc")
+    add_files("serial/src/impl/list_ports/list_ports_linux.cc")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
