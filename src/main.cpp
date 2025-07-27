@@ -221,13 +221,16 @@ int main(int argc, char *argv[])
     std::filesystem::directory_iterator list(dir);	        //文件入口容器
     //
     for (auto& it:list) {
+        if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
+            continue;
+	}
         vec.push_back(it.path().filename());
     }
     std::sort(vec.begin(), vec.end());
 
     int j = 0;
     for (auto i: vec) {
-        printf("[%d]%s\n", j++, i.c_str());
+        printf("[%02d]%s\n", j++, i.c_str());
     }
 
     int fd[2];
