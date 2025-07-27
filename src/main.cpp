@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <functional>
 #include <filesystem>
+#include <string.h>
 
 int get_weekday(void)
 {
@@ -42,13 +43,21 @@ int main(int argc, char *argv[])
 {
     int ret = 0;
     char cmd[1024] = {0};
+    const char * dir = ".";
 
     uint64_t start, end;
+
+    for(int i = 0; i < argc; i++) {
+        if(0 == strcmp("-d", argv[i])) {
+            if(i+1 >= argc) continue;
+            dir = argv[i+1];
+	}
+    }
 
 
     std::string s;
     std::vector<std::string> vec;
-    std::filesystem::directory_iterator list(".");	        //文件入口容器
+    std::filesystem::directory_iterator list(dir);	        //文件入口容器
 								//
     for (auto& it:list) {
 	    vec.push_back(it.path().filename());
