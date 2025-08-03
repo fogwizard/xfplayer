@@ -185,7 +185,7 @@ int switch_read(int *sw1, int *sw2, int *sw3)
     }
 
     //int switch_play = modbus_respond[10];
-    //printf("recv=[%s] crc_recv(0x%x) == crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
+    printf("recv=[%s] crc_recv(0x%x) == crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
     return 0;
 }
 
@@ -353,7 +353,7 @@ int main(int argc, char *argv[])
                         }
 
                         std::string stat_str = "";
-                        int stat = get_audio_card_status("/proc/asound/card0/pcm0p/sub0/status", stat_str);
+                        int stat = get_audio_card_status("/proc/asound/card0/pcm3p/sub0/status", stat_str);
                         printf("wait=%05ds %s stat=%d\n", (int)(end - start), stat_str.c_str(), stat);
 
                         if((need_kill) || (0 == stat)) {
