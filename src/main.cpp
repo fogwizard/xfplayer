@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <memory>
+#include <queue>
+#include <mutex>
 #include <chrono>
 #include <algorithm>
 #include <functional>
@@ -16,6 +19,20 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include "serial/serial.h"
+
+extern "C" {
+    typedef int (*callback_t)(int type, int code, int value);
+    int getevent_main(int argc, char *argv[], callback_t callback);
+};
+
+typedef struct {
+    int type;
+    int code;
+    int value;
+}custom_event_t;
+
+std::mutex share_mtx;
+std::queue<custom_event_t> share_queue;
 
 int get_weekday(void)
 {
@@ -132,6 +149,17 @@ int switch_read(int *sw1, int *sw2, int *sw3)
     const char *port = "/dev/ttyUSB0";
 
     int week_day = get_weekday();
+
+    std::unique_lock<std::mutex> lck(share_mtx);
+    if(share_queue.size() > 0) {
+        custom_event_t ev = {0};
+        do {
+            ev = share_queue.pop();
+        }while(share_queue.size() > 0);
+
+        printf("type=%d code=%d value=%d queue_len=%d\n", ev.type, ev.code, ev.value, share_queue.size());
+	return 0;
+    }
 
     serial::Serial my_serial;
 
@@ -268,6 +296,22 @@ int get_audio_card_status(const char *path, std::string & out_str)
     return 1;
 }
 
+int onKeyEvent(int type, int code, int value)
+{
+    if(1 != type) {
+        return 0;
+    }
+    std::unique_lock<std::mutex> lck(share_mtx);
+    custom_event_t ev {type, code, value};
+
+    if(value == 1) {
+        share_queue.push(ev);
+    }
+
+    printf("type=%d code=%d value=%d queue_len=%d\n", type, code, value, share_queue.size());
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     int ret = 0;
@@ -309,6 +353,14 @@ int main(int argc, char *argv[])
         perror("pipe error\n");
         return -1;
     }
+
+    std::thread t([]() {
+        char *argv[2] = {"main", "/dev/input/event10"};
+        getevent_main(2, argv, &onKeyEvent);
+	while(1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        }
+    });
 
     while(true) {
         if(get_play_event(vec, s, dir)) {
