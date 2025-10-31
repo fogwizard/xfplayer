@@ -147,18 +147,42 @@ int switch_read(int *sw1, int *sw2, int *sw3)
     uint8_t modbus_respond[] = {0x01, 0x04, 0x08, 0x00,0x01, 0x00, 0x00,0x00,0x00,0x00,0x00,0x34,0xCD};
     int baud = 9600;
     const char *port = "/dev/ttyUSB0";
+    static std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
 
     int week_day = get_weekday();
 
     std::unique_lock<std::mutex> lck(share_mtx);
     if(share_queue.size() > 0) {
+        /* update start */
+        start = std::chrono::system_clock::now();
         custom_event_t ev = {0};
         do {
-            ev = share_queue.pop();
+            ev = share_queue.front();
+            share_queue.pop();
         }while(share_queue.size() > 0);
+        printf("type=%d code=%d value=%d queue_len=%ld\n", ev.type, ev.code, ev.value, share_queue.size());
 
-        printf("type=%d code=%d value=%d queue_len=%d\n", ev.type, ev.code, ev.value, share_queue.size());
+        /* this is the expect case */
+        if(sw1) {
+            *sw1 = 1;
+        }
+        if(sw2) {
+            *sw2 = ev.code == 105? 1: 0;
+        }
+        if(sw3) {
+            *sw3 = ev.code == 106? 1: 0;
+        }
 	return 0;
+    } else {
+        auto delta = std::chrono::system_clock::now() - start;
+	if (delta.count() < 600) {
+            /* this is the keyboard acitve mode */
+            *sw1 = 1;
+            *sw2 = 0;
+            *sw3 = 0;
+            printf("keyboard active mode, delta=%ld remain=%ld\n", delta.count(), 600ul - delta.count());
+	    return 0;
+	}
     }
 
     serial::Serial my_serial;
@@ -308,7 +332,7 @@ int onKeyEvent(int type, int code, int value)
         share_queue.push(ev);
     }
 
-    printf("type=%d code=%d value=%d queue_len=%d\n", type, code, value, share_queue.size());
+    printf("type=%d code=%d value=%d queue_len=%ld\n", type, code, value, share_queue.size());
     return 0;
 }
 
@@ -355,7 +379,9 @@ int main(int argc, char *argv[])
     }
 
     std::thread t([]() {
-        char *argv[2] = {"main", "/dev/input/event10"};
+        char argv1[] = "main";
+        char argv2[] = "/dev/input/event10";
+        char *argv[2] = {argv1, argv2};
         getevent_main(2, argv, &onKeyEvent);
 	while(1) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5000));
