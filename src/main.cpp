@@ -174,13 +174,15 @@ int switch_read(int *sw1, int *sw2, int *sw3)
         }
 	return 0;
     } else {
-        auto delta = std::chrono::system_clock::now() - start;
-	if (delta.count() < 600) {
+        auto delta = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count();
+
+	/* 20 minite = 1200 seconds  */
+	if (delta < 1200ul) {
             /* this is the keyboard acitve mode */
             *sw1 = 1;
             *sw2 = 0;
             *sw3 = 0;
-            printf("keyboard active mode, delta=%ld remain=%ld\n", delta.count(), 600ul - delta.count());
+            printf("keyboard active mode, delta=%ld remain=%ld:%ld\n", delta, (1200ul - delta)/60, (1200ul - delta)%60);
 	    return 0;
 	}
     }
