@@ -270,6 +270,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     uint8_t modbus_respond[] = {0x01, 0x04, 0x08, 0x00,0x01, 0x00, 0x00,0x00,0x00,0x00,0x00,0x34,0xCD};
     int baud = 9600;
     const char *port = "/dev/ttyUSB0";
+    static bool keyboard_active = false;
     static std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
 
     int week_day = get_weekday();
@@ -288,6 +289,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
         /* this is the expect case */
         if(sw1) {
             *sw1 = 1;
+            keyboard_active = true;
             enable_hdmi_output(1);
         }
         if(sw2) {
@@ -307,11 +309,13 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
            printf("recv key=48, exit keyboard active\n");
         }
 	return 0;
-    } else {
+    } else if (keyboard_active) {
+        /* calc delta */
         auto delta = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count();
-
-	/* 20 minite = 1200 seconds  */
-	if (delta < 1200ul) {
+	if (delta > 1200ul) {
+	    /* 20 minite = 1200 seconds  */
+	    keyboard_active = false;
+	} else {
             /* this is the keyboard acitve mode */
             *sw1 = 1;
             *sw2 = 0;
