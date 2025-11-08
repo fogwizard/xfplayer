@@ -225,7 +225,8 @@ int enable_hdmi_output(int enable)
     FILE *fp = nullptr;
     char full_path[256];
     char rd_buffer[256];
-    const char *value_str[] = {"on", "off"};
+    const char *value_str[] = {"off", "on"};
+    const char *value_expect[] = {"disconnected", "connected"};
     const char *value = value_str[!!enable];
     int len = 0;
 
@@ -243,7 +244,7 @@ int enable_hdmi_output(int enable)
     len = fscanf(fp, "%s",  rd_buffer);
     fclose(fp);
 
-    if(strcmp(value, rd_buffer)) {
+    if(strcmp(value_expect[!!enable], rd_buffer)) {
         fp = fopen(full_path, "w+");
         if (nullptr == fp) {
             printf("%s: open %s fail\n", __func__, full_path);
