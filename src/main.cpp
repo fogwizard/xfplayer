@@ -65,25 +65,72 @@ uint16_t crc16tablefast(uint8_t *ptr, uint16_t len)
     return crc;
 }
 
-int get_current_play_index(const char *dir, int *idx, int max)
+int get_file_list(std::vector<std::string> & vec, const char *dir)
 {
-    char full_path[256];
-    int index = 0;
+//    std::vector<std::string> vec;
+    std::filesystem::directory_iterator list(dir);	        //文件入口容器
+    //
+    for (auto& it:list) {
+        if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
+            continue;
+        }
+        if(0 == strcmp(it.path().filename().c_str(), "play_dir")) {
+            continue;
+        }
+        vec.push_back(it.path().filename());
+    }
+    std::sort(vec.begin(), vec.end());
 
-    snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_idx");
-    if(0 == access(full_path, 0)) {
-        FILE *fp = fopen(full_path, "r");
-        int len = fscanf(fp, "%d",  &index);
-        fclose(fp);
-    } else {
-        FILE *fp = fopen(full_path, "w+");
-        fprintf(fp, "%d\n",  0);
-        fclose(fp);
-        index = 0;
+    int j = 0;
+    for (auto i: vec) {
+        printf("[%02d]%s\n", j++, i.c_str());
     }
 
-    if(idx) {
-        *idx = index;
+    return 0;
+}
+
+
+int get_current_play_index(const char *dir, int *out_dir_idx, int max_dir, int *out_file_idx, int max_file)
+{
+    char full_path[256];
+    char full_dir[256];
+    int file_idx= 0;
+    int dir_idx = 0;
+    int len = 0;
+    FILE *fp = NULL;
+
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_idx");
+    snprintf(full_dir, sizeof(full_dir), "%s/%s", dir, "play_dir");
+
+    if(0 == access(full_path, 0) && 0 == access(full_dir, 0)) {
+        fp = fopen(full_path, "r");
+        len = fscanf(fp, "%d",  &file_idx);
+        fclose(fp);
+
+        fp = fopen(full_dir, "r");
+        len = fscanf(fp, "%d",  &dir_idx);
+        fclose(fp);
+    } else {
+        printf("%s: create file1=%s file2=%s\n", __func__, full_dir, full_path);
+        fp = fopen(full_path, "w+");
+        fprintf(fp, "%d\n",  0);
+        fclose(fp);
+        file_idx = 0;
+
+        fp = fopen(full_dir, "w+");
+        fprintf(fp, "%d\n",  0);
+        fclose(fp);
+        dir_idx= 0;
+    }
+
+    printf("%s: load dir_idx=%d file_idx=%d\n", __func__, dir_idx, file_idx);
+
+    if(out_file_idx) {
+        *out_file_idx = file_idx;
+    }
+
+    if(out_dir_idx) {
+        *out_dir_idx = dir_idx;
     }
 
     return 0;
@@ -108,7 +155,7 @@ int set_next_play_index(const char *dir, int max)
     int idx    = 0;
     int origin = 0;
 
-    get_current_play_index(dir, &idx, max);
+    get_current_play_index(dir, nullptr, 0, &idx, max);
 
     origin = idx++;
     if(idx >= max) {
@@ -127,7 +174,7 @@ int set_prev_play_index(const char *dir, int max)
     int idx = 0;
     int origin = 0;
 
-    get_current_play_index(dir, &idx, max);
+    get_current_play_index(dir, nullptr, 0, &idx, max);
 
     origin = idx--;
     if(idx < 0) {
@@ -136,11 +183,44 @@ int set_prev_play_index(const char *dir, int max)
     }
     save_current_play_index(dir, &idx, max);
 
+    printf("%s: file_idx: %d->%d\n", __func__, origin, idx);
+    return 0;
+}
+
+int save_current_play_dir(const char *dir, int *idx, int max)
+{
+    char full_path[256];
+    int index = 0;
+
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir, "play_dir");
+
+    FILE *fp = fopen(full_path, "w+");
+    fprintf(fp, "%d\n",  *idx);
+    fclose(fp);
+
+    return 0;
+}
+
+int set_next_play_dir(const char *dir, int max)
+{
+    int idx    = 0;
+    int origin = 0;
+
+    get_current_play_index(dir, &idx, 0, nullptr, 0);
+
+    origin = idx++;
+    if(idx >= max) {
+        printf("idx = %d is too big, roll back to 0\n", idx);
+        idx = 0;
+    }
+
+    save_current_play_dir(dir, &idx, max);
+
     printf("%s: idx: %d->%d\n", __func__, origin, idx);
     return 0;
 }
 
-int switch_read(int *sw1, int *sw2, int *sw3)
+int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
 {
     char rd_buffer[512] = {0};
     uint8_t modbus_request[] = {0x01, 0x04, 0x00, 0x00,0x00, 0x04, 0xF1, 0xC9};
@@ -172,6 +252,16 @@ int switch_read(int *sw1, int *sw2, int *sw3)
         if(sw3) {
             *sw3 = ev.code == 106? 1: 0;
         }
+        if(sw4) {
+            *sw4 = ev.code == 15? 1: 0;
+        }
+
+        /* exit key */
+        if (48 == ev.code) {
+           std::chrono::seconds t1(1200); 
+           start = std::chrono::system_clock::now() - t1; 
+           printf("recv key=48, exit keyboard active\n");
+        }
 	return 0;
     } else {
         auto delta = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count();
@@ -182,7 +272,7 @@ int switch_read(int *sw1, int *sw2, int *sw3)
             *sw1 = 1;
             *sw2 = 0;
             *sw3 = 0;
-            printf("keyboard active mode, delta=%ld remain=%ld:%ld\n", delta, (1200ul - delta)/60, (1200ul - delta)%60);
+            printf("keyboard active mode, delta=%ld remain=%02ld:%02ld\n", delta, (1200ul - delta)/60, (1200ul - delta)%60);
 	    return 0;
 	}
     }
@@ -243,39 +333,49 @@ int switch_read(int *sw1, int *sw2, int *sw3)
     return 0;
 }
 
-int get_play_event(std::vector<std::string> &vec, std::string &s, const char *dir)
+int get_play_event(std::vector<std::string> &vec_dir, std::string &s, const char *dir)
 {
-    char full_path[256];
+    char file_full_path[256];
+    char dir_full_path[256];
     int switch_play = 0;
     int switch_next = 0;
     int switch_prev = 0;
 
-    switch_read(&switch_play, &switch_next, &switch_prev);
+    switch_read(&switch_play, &switch_next, &switch_prev, nullptr);
 
     if(!switch_play) {
         printf("switch_play=%d is not on, wait next\n", switch_play);
         return 0;
     }
 
-    int idx = 0;
+    int file_idx = 0;
+    int dir_idx  = 0;
     int retry = 0;
+    std::string splitc = "/";
+    std::vector<std::string> vec_file;
+
     do {
-        if(get_current_play_index(dir, &idx, vec.size())) {
+        if(get_current_play_index(dir, &dir_idx, vec_dir.size(), &file_idx, 0)) {
             printf("get_next_play_index failed\n");
             return 0;
         }
 
-	snprintf(full_path, sizeof(full_path), "%s/%s", dir, vec[idx].c_str());
-        if(0 == access(full_path, 0)) {
-            printf("idx=%d file=%s\n", idx, full_path);
+	snprintf(dir_full_path, sizeof(dir_full_path), "%s/%s", dir, vec_dir[dir_idx].c_str());
+        printf("%s\n", __func__);
+        get_file_list(vec_file, dir_full_path);
+
+	snprintf(file_full_path, sizeof(file_full_path), "%s/%s/%s", \
+			dir, vec_dir[dir_idx].c_str(), vec_file[file_idx].c_str());
+        if(0 == access(file_full_path, 0)) {
+            printf("dir_idx=%d file_idx=%d file=%s\n", dir_idx, file_idx, file_full_path);
             break;
         }
 
-        printf("file=%s access failed, try next\n", full_path);
-        set_next_play_index(dir, vec.size());
+        printf("file=%s access failed, try next\n", file_full_path);
+        set_next_play_index(dir_full_path, vec_file.size());
     } while(++retry < 1000);
 
-    s = vec[idx];
+    s =  vec_dir[dir_idx] + splitc + vec_file[file_idx];
     return 1;
 }
 
@@ -334,7 +434,7 @@ int onKeyEvent(int type, int code, int value)
         share_queue.push(ev);
     }
 
-    printf("type=%d code=%d value=%d queue_len=%ld\n", type, code, value, share_queue.size());
+    //printf("type=%d code=%d value=%d queue_len=%ld\n", type, code, value, share_queue.size());
     return 0;
 }
 
@@ -343,35 +443,20 @@ int main(int argc, char *argv[])
     int ret = 0;
     int system_ret = 0;
     char cmd[1024] = {0};
-    const char * dir = ".";
+    const char * root_dir = ".";
 
     uint64_t start, end;
 
     for(int i = 0; i < argc; i++) {
         if(0 == strcmp("-d", argv[i])) {
             if(i+1 >= argc) continue;
-            dir = argv[i+1];
+            root_dir = argv[i+1];
         }
-    }
-
-    std::string s;
-    std::vector<std::string> vec;
-    std::filesystem::directory_iterator list(dir);	        //文件入口容器
-    //
-    for (auto& it:list) {
-        if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
-            continue;
-        }
-        vec.push_back(it.path().filename());
-    }
-    std::sort(vec.begin(), vec.end());
-
-    int j = 0;
-    for (auto i: vec) {
-        printf("[%02d]%s\n", j++, i.c_str());
     }
 
     int fd[2];
+    std::string s;
+    std::vector<std::string> vec;
 
     ret = pipe(fd);
 
@@ -390,8 +475,10 @@ int main(int argc, char *argv[])
         }
     });
 
+    get_file_list(vec, root_dir);
+
     while(true) {
-        if(get_play_event(vec, s, dir)) {
+        if(get_play_event(vec, s, root_dir)) {
             pid_t id = fork();
             start = get_time_seconds();
             printf("start=%lu.\n", start);
@@ -400,7 +487,7 @@ int main(int argc, char *argv[])
                 sprintf(cmd, "killall -9 vlc");
                 system_ret = system(cmd);
                 /* run vlc */
-                sprintf(cmd, "DISPLAY=0.0 vlc \"%s/%s\"  --play-and-exit  --fullscreen",  dir, s.c_str());
+                sprintf(cmd, "DISPLAY=0.0 vlc \"%s/%s\"  --play-and-exit  --fullscreen",  root_dir, s.c_str());
                 printf("cmd=%s\n", cmd);
                 system_ret = system(cmd);
                 break;
@@ -419,16 +506,20 @@ int main(int argc, char *argv[])
                         int switch_play = 0;
                         int switch_next = 0;
                         int switch_prev = 0;
+                        int switch_next_dir = 0;
                         int need_kill = 0;
 
-                        switch_read(&switch_play, &switch_next, &switch_prev);
+                        switch_read(&switch_play, &switch_next, &switch_prev, &switch_next_dir);
                         if(0 == switch_play) {
                             need_kill = 1;
                         } else if(switch_next) {
-                            set_next_play_index(dir, vec.size());
+                            set_next_play_index(root_dir, vec.size());
                             need_kill = 1;
                         } else if(switch_prev) {
-                            set_prev_play_index(dir, vec.size());
+                            set_prev_play_index(root_dir, vec.size());
+                            need_kill = 1;
+                        } else if(switch_next_dir) {
+                            set_next_play_dir(root_dir, vec.size());
                             need_kill = 1;
                         }
 
@@ -444,7 +535,7 @@ int main(int argc, char *argv[])
 
 			    /* stat == 0 means play done */
 			    if(0 == stat) {
-                                set_next_play_index(dir, vec.size());
+                                set_next_play_index(root_dir, vec.size());
 			    }
                             break;
                         }
