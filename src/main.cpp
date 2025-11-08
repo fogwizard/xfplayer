@@ -257,7 +257,7 @@ int enable_hdmi_output(int enable)
         std::chrono::system_clock::time_point end = std::chrono::system_clock::now();
         auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start).count();
 
-        printf("%s: read=%s len=%d  write=%s cost=%ldMs\n", __func__, rd_buffer, len, value, delta);
+        printf("%s: read=%s len=%d expect=%s write=%s cost=%ldMs\n", __func__, rd_buffer, len, value_expect[!!enable], value, delta);
     }
 
 
