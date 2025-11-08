@@ -220,6 +220,49 @@ int set_next_play_dir(const char *dir, int max)
     return 0;
 }
 
+int enable_hdmi_output(int enable)
+{
+    FILE *fp = nullptr;
+    char full_path[256];
+    char rd_buffer[256];
+    const char *value_str[] = {"on", "off"};
+    const char *value = value_str[!!enable];
+    int len = 0;
+
+    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
+
+    snprintf(full_path, sizeof(full_path), "%s/%s", "/sys/class/drm/card1-HDMI-A-3/", "status");
+
+    /* read and check hdmi status */
+    fp = fopen(full_path, "r");
+    if (nullptr == fp) {
+        printf("%s: open %s fail\n", __func__, full_path);
+	return -1;
+    }
+
+    len = fscanf(fp, "%s",  rd_buffer);
+    fclose(fp);
+
+    if(strcmp(value, rd_buffer)) {
+        fp = fopen(full_path, "w+");
+        if (nullptr == fp) {
+            printf("%s: open %s fail\n", __func__, full_path);
+            return -2;
+        }
+
+        fprintf(fp, "%s\n",  value);
+        fclose(fp);
+
+        std::chrono::system_clock::time_point end = std::chrono::system_clock::now();
+        auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start).count();
+
+        printf("%s: read=%s len=%d  write=%s cost=%ldMs\n", __func__, rd_buffer, len, value, delta);
+    }
+
+
+    return 0;
+}
+
 int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
 {
     char rd_buffer[512] = {0};
@@ -245,6 +288,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
         /* this is the expect case */
         if(sw1) {
             *sw1 = 1;
+            enable_hdmi_output(1);
         }
         if(sw2) {
             *sw2 = ev.code == 105? 1: 0;
@@ -320,6 +364,9 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     /* this is the expect case */
     if(sw1) {
         *sw1 = modbus_respond[4];
+	if (0 == modbus_respond[4]) {
+            enable_hdmi_output(0);
+	}
     }
     if(sw2) {
         *sw2 = modbus_respond[6];
