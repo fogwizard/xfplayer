@@ -66,24 +66,20 @@ uint16_t crc16tablefast(uint8_t *ptr, uint16_t len)
     return crc;
 }
 
-static bool IsVideo(const char *file)
+static bool IsVideo(const char *ext)
 {
     bool isVideo = false;
     const char * formateList[] = {
-         "avi","flv","mpg","mpeg","mpe","m1v","m2v","mpv2","mp2v","ts","tp","tpr","pva","pss","mp4","m4v",
-         "m4p","m4b","3gp","3gpp","3g2","3gp2","ogg","mov","rm","ram","rmvb","rpm"
+         ".avi",".flv",".mpg",".mpeg",".mpe",".m1v",".m2v",".mpv2",".mp2v",".ts",".tp",".tpr",".pva",".pss",".mp4",".m4v",
+         ".m4p",".m4b",".3gp",".3gpp",".3g2",".3gp2",".ogg",".mov",".rm",".ram",".rmvb",".rpm"
     };
 
-    const int file_len = strlen(file);
+    const int file_len = strlen(ext);
 
     for(const char* i :formateList) {
         int len = strlen(i);
-	if(file_len - len -1 < 0) {
-            continue;
-	}
 
-	const char *ptr = &file[file_len - len -1];
-	if(0 == strncmp(i, ptr, len)) {
+	if(0 == strncmp(i, ext, len)) {
             isVideo = true;
             break;
 	}
@@ -94,10 +90,9 @@ static bool IsVideo(const char *file)
 
 int get_file_list(std::vector<std::string> & vec, const char *dir)
 {
-//    std::vector<std::string> vec;
     std::filesystem::directory_iterator list(dir);	        //文件入口容器
-    struct stat infos;
-    //
+    int count = 0;
+
     for (auto& it:list) {
         if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
             continue;
@@ -106,11 +101,11 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
             continue;
         }
 
-        if (stat(it.path().filename().c_str(), &infos) != 0) {
-            return -1;
-        } else if (infos.st_mode & S_IFDIR) {
+        if(std::filesystem::is_directory(it.path())) {
+	    count++;
             vec.push_back(it.path().filename());
-        } else if ((infos.st_mode & S_IFREG) && (IsVideo(it.path().filename().c_str()))) {
+        } else if ((std::filesystem::is_regular_file(it.path())) && (IsVideo(it.path().extension().c_str()))){
+	    count++;
             vec.push_back(it.path().filename());
 	}
     }
@@ -122,6 +117,7 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
         printf("[%02d]%s\n", j++, i.c_str());
     }
 
+    printf("total count=%d\n", count);
     return 0;
 }
 
