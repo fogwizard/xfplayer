@@ -65,6 +65,32 @@ uint16_t crc16tablefast(uint8_t *ptr, uint16_t len)
     return crc;
 }
 
+static bool IsVideo(const char *file)
+{
+    bool isVideo = false;
+    const char * formateList[] = {
+         "avi","flv","mpg","mpeg","mpe","m1v","m2v","mpv2","mp2v","ts","tp","tpr","pva","pss","mp4","m4v",
+         "m4p","m4b","3gp","3gpp","3g2","3gp2","ogg","mov","rm","ram","rmvb","rpm"
+    };
+
+    const int file_len = strlen(file);
+
+    for(const char* i :formateList) {
+        int len = strlen(i);
+	if(file_len - len -1 < 0) {
+            continue;
+	}
+
+	const char *ptr = &file[file_len - len -1];
+	if(0 == strncmp(i, ptr, len)) {
+            isVideo = true;
+            break;
+	}
+    }
+
+    return isVideo;
+}
+
 int get_file_list(std::vector<std::string> & vec, const char *dir)
 {
 //    std::vector<std::string> vec;
@@ -77,7 +103,10 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
         if(0 == strcmp(it.path().filename().c_str(), "play_dir")) {
             continue;
         }
-        vec.push_back(it.path().filename());
+
+        if(IsVideo(it.path().filename().c_str())) {
+            vec.push_back(it.path().filename());
+	}
     }
     std::sort(vec.begin(), vec.end());
 
