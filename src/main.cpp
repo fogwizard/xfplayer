@@ -315,6 +315,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
 	if (delta > 1200ul) {
 	    /* 20 minite = 1200 seconds  */
 	    keyboard_active = false;
+            enable_hdmi_output(0);
 	} else {
             /* this is the keyboard acitve mode */
             *sw1 = 1;
@@ -388,7 +389,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     }
 
     //int switch_play = modbus_respond[10];
-    printf("recv=[%s] crc_recv(0x%x) == crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
+    //printf("recv=[%s] crc_recv(0x%x) == crc_calc(0x%x)\n", rd_buffer, crc_recv, crc_calc);
     return 0;
 }
 
