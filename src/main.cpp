@@ -89,7 +89,6 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
     return 0;
 }
 
-
 int get_current_play_index(const char *dir, int *out_dir_idx, int max_dir, int *out_file_idx, int max_file)
 {
     char full_path[256];
@@ -260,7 +259,6 @@ int enable_hdmi_output(int enable)
         printf("%s: read=%s len=%d expect=%s write=%s cost=%ldMs\n", __func__, rd_buffer, len, value_expect[!!enable], value, delta);
     }
 
-
     return 0;
 }
 
@@ -272,6 +270,7 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     int baud = 9600;
     const char *port = "/dev/ttyUSB0";
     static bool keyboard_active = false;
+    static bool modbus_active = false;
     static std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
 
     int week_day = get_weekday();
@@ -369,8 +368,16 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     /* this is the expect case */
     if(sw1) {
         *sw1 = modbus_respond[4];
-	if (0 == modbus_respond[4]) {
-            enable_hdmi_output(0);
+	if (modbus_respond[4]) {
+            if(!modbus_active) {
+                enable_hdmi_output(1);
+                modbus_active = true;
+	    }
+	} else {
+            if(modbus_active) {
+                enable_hdmi_output(0);
+                modbus_active = false;
+	    }
 	}
     }
     if(sw2) {
@@ -516,6 +523,9 @@ int main(int argc, char *argv[])
         perror("pipe error\n");
         return -1;
     }
+
+    /* enable HDMI to fix VLC init fail */
+    enable_hdmi_output(1);
 
     std::thread t([]() {
         char argv1[] = "main";
