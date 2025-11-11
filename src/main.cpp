@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include "serial/serial.h"
+#include "sys/stat.h"
 
 extern "C" {
     typedef int (*callback_t)(int type, int code, int value);
@@ -95,6 +96,7 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
 {
 //    std::vector<std::string> vec;
     std::filesystem::directory_iterator list(dir);	        //文件入口容器
+    struct stat infos;
     //
     for (auto& it:list) {
         if(0 == strcmp(it.path().filename().c_str(), "play_idx")) {
@@ -104,10 +106,15 @@ int get_file_list(std::vector<std::string> & vec, const char *dir)
             continue;
         }
 
-        if(IsVideo(it.path().filename().c_str())) {
+        if (stat(it.path().filename().c_str(), &infos) != 0) {
+            return -1;
+        } else if (infos.st_mode & S_IFDIR) {
+            vec.push_back(it.path().filename());
+        } else if ((infos.st_mode & S_IFREG) && (IsVideo(it.path().filename().c_str()))) {
             vec.push_back(it.path().filename());
 	}
     }
+
     std::sort(vec.begin(), vec.end());
 
     int j = 0;
