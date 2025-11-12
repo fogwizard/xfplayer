@@ -35,6 +35,8 @@ typedef struct {
 std::mutex share_mtx;
 std::queue<custom_event_t> share_queue;
 
+uint64_t get_time_seconds(void);
+
 int get_weekday(void)
 {
     time_t rawtime;
@@ -432,11 +434,13 @@ int get_play_event(std::vector<std::string> &vec_dir, std::string &s, const char
     int switch_play = 0;
     int switch_next = 0;
     int switch_prev = 0;
+    uint64_t start = 0;
 
+    start = get_time_seconds();
     switch_read(&switch_play, &switch_next, &switch_prev, nullptr);
 
     if(!switch_play) {
-        printf("switch_play=%d is not on, wait next\n", switch_play);
+        printf("switch_play=%d is not on, wait next(%ld)\n", switch_play, start);
         return 0;
     }
 
