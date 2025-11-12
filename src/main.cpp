@@ -427,6 +427,15 @@ int switch_read(int *sw1, int *sw2, int *sw3, int *sw4)
     return 0;
 }
 
+bool check_out_of_range(int idx, int max)
+{
+    if((idx >= 0) && idx < max) {
+	  return false;
+    }
+
+    return true;
+}
+
 int get_play_event(std::vector<std::string> &vec_dir, std::string &s, const char *dir)
 {
     char file_full_path[256];
@@ -464,6 +473,11 @@ int get_play_event(std::vector<std::string> &vec_dir, std::string &s, const char
              set_next_play_dir(dir, vec_dir.size());
 	     continue;
 	}
+
+        if(check_out_of_range(file_idx, vec_file.size())) {
+             printf("index=%d is out of range(0-%ld), load 0\n", file_idx, vec_file.size());
+             file_idx = 0;
+        }
 
 	snprintf(file_full_path, sizeof(file_full_path), "%s/%s/%s", \
 			dir, vec_dir[dir_idx].c_str(), vec_file[file_idx].c_str());
