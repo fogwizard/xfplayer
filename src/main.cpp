@@ -457,8 +457,13 @@ int get_play_event(std::vector<std::string> &vec_dir, std::string &s, const char
         }
 
 	snprintf(dir_full_path, sizeof(dir_full_path), "%s/%s", dir, vec_dir[dir_idx].c_str());
-        printf("%s\n", __func__);
+        printf("%s: list dir=%s\n", __func__, dir_full_path);
         get_file_list(vec_file, dir_full_path);
+
+	if(vec_file.size() == 0) {
+             set_next_play_dir(dir, vec_dir.size());
+	     continue;
+	}
 
 	snprintf(file_full_path, sizeof(file_full_path), "%s/%s/%s", \
 			dir, vec_dir[dir_idx].c_str(), vec_file[file_idx].c_str());
@@ -574,6 +579,7 @@ int main(int argc, char *argv[])
         }
     });
 
+    printf("%s: list dir=%s\n", __func__, root_dir);
     get_file_list(vec, root_dir);
 
     while(true) {
