@@ -644,7 +644,7 @@ int main(int argc, char *argv[])
 
                         std::string stat_str = "";
                         int stat = get_audio_card_status("/proc/asound/card0/pcm3p/sub0/status", stat_str);
-                        printf("wait=%05ds %s stat=%d\n", (int)(end - start), stat_str.c_str(), stat);
+                        //printf("wait=%05ds %s stat=%d\n", (int)(end - start), stat_str.c_str(), stat);
 
                         if((need_kill) || (0 == stat)) {
                             sprintf(cmd, "killall -9 vlc");
@@ -662,6 +662,7 @@ int main(int argc, char *argv[])
                         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                     } else if(id == ret) {
                         printf("play done, delta=%lu s\n", end - start);
+                        set_next_play_index(root_dir, vec.size());
                     }
                 } while(ret != id);
             }
